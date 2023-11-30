@@ -12,10 +12,24 @@ std::vector<int> extractNthElements(const std::vector<std::vector<int>>& input, 
     return result;
 }
 
-std::vector<std::vector<int>> gaussjordan(const std::vector<std::vector<int>>& X) {
+std::vector<std::vector<int>> generateIdentityMatrix(int n) {
+    // Initialize the identity matrix with zeros
+    std::vector<std::vector<int>> identityMatrix(n, std::vector<int>(n, 0));
+
+    // Set diagonal elements to 1
+    for (int i = 0; i < n; ++i) {
+        identityMatrix[i][i] = 1;
+    }
+
+    return identityMatrix;
+}
+
+std::pair<std::vector<std::vector<int>>, std::vector<std::vector<int>>> gaussjordan(const std::vector<std::vector<int>>& X) {
     std::vector<std::vector<int>> A = X;
     int m = A.size();//rows
     int n = A[0].size();//cols
+
+    std::vector<std::vector<int>> P = generateIdentityMatrix(m);
 
     int pivot_old = -1;
     for (int j = 0; j < n; ++j) {
@@ -29,12 +43,16 @@ std::vector<std::vector<int>> gaussjordan(const std::vector<std::vector<int>>& X
             pivot_old += 1;
             if (pivot_old != pivot) {
                 std::swap(A[pivot], A[pivot_old]);
+                std::swap(P[pivot], P[pivot_old]);
             }
 
             for (int i = 0; i < m; ++i) {
                 if (i != pivot_old && A[i][j]) {
                     for (int k = 0; k < n; ++k) {
                         A[i][k] = abs(A[i][k] - A[pivot_old][k]);
+                        if (static_cast<unsigned long>(k) < P[0].size()){
+                            P[i][k] = abs(P[i][k] - P[pivot_old][k]);
+                        }
                     }
                 }
             }
@@ -45,7 +63,7 @@ std::vector<std::vector<int>> gaussjordan(const std::vector<std::vector<int>>& X
         }
     }
 
-    return A;
+    return std::make_pair(A, P);
 }
 
 std::vector<std::vector<int>> binaryproduct(const std::vector<std::vector<int>>& matrix1, const std::vector<std::vector<int>>& matrix2) {
@@ -76,18 +94,6 @@ std::vector<std::vector<int>> binaryproduct(const std::vector<std::vector<int>>&
     return result;
 }
 
-std::vector<std::vector<int>> generateIdentityMatrix(int n) {
-    // Initialize the identity matrix with zeros
-    std::vector<std::vector<int>> identityMatrix(n, std::vector<int>(n, 0));
-
-    // Set diagonal elements to 1
-    for (int i = 0; i < n; ++i) {
-        identityMatrix[i][i] = 1;
-    }
-
-    return identityMatrix;
-}
-
 std::vector<std::vector<int>> transposeMatrix(const std::vector<std::vector<int>>& matrix) {
     // Get the number of rows and columns in the original matrix
     int rows = matrix.size();
@@ -114,7 +120,7 @@ std::pair<std::vector<std::vector<int>>, std::vector<std::vector<int>>> coding_m
     std::vector<std::vector<int>> P1 = generateIdentityMatrix(n_code);
 
     // Compute row-reduced form of H
-    std::vector<std::vector<int>> Hrowreduced = gaussjordan(H);
+    std::vector<std::vector<int>> Hrowreduced = gaussjordan(H).first;
 
     // Compute the number of bits
     int n_bits = n_code - std::count_if(Hrowreduced.begin(), Hrowreduced.end(),
@@ -194,19 +200,34 @@ std::pair<std::vector<std::vector<int>>, std::vector<std::vector<int>>> coding_m
     return std::make_pair(H_new, transposeMatrix(G_systematic));
 }
 
-// Function declarations
-std::vector<std::vector<int>> parity_check_matrix(int length, int seed = 0);
+std::vector<std::vector<int>> coding_matrix(const std::vector<std::vector<int>>& H) {
+    int n_code = H[0].size();
 
-/*
-// Function to check_random_state
-std::default_random_engine check_random_state(int seed) {
-    if (seed == 0) {
-        return std::default_random_engine(std::random_device()());
-    } else {
-        return std::default_random_engine(seed);
+    // DOUBLE GAUSS-JORDAN:
+
+    auto Href_colonnes_tQ = gaussjordan(transposeMatrix(H));
+
+    auto Href_diag = gaussjordan(transposeMatrix(Href_colonnes_tQ.first)).first;
+
+    //auto Q = Href_colonnes_tQ.second;
+    auto Q = transposeMatrix(Href_colonnes_tQ.second);
+
+    //int n_bits = n_code - std::accumulate(Href_diag.begin(), Href_diag.end(), 0);
+    int n_bits = n_code - static_cast<int>(std::accumulate(Href_diag.begin(), Href_diag.end(), 0, 
+        [](int sum, const std::vector<int>& row) {
+            return sum + std::accumulate(row.begin(), row.end(), 0);
+        }));
+
+    std::vector<std::vector<int>> Y(n_code, std::vector<int>(n_bits, 0));
+    for (int i = n_code - n_bits; i < n_code; ++i) {
+        Y[i][i - (n_code - n_bits)] = 1;
     }
+
+    auto tG = binaryproduct(Q, Y);
+
+    //return transposeMatrix(tG);
+    return tG;
 }
-*/
 
 // Function to generate a regular Parity-Check Matrix H
 std::vector<std::vector<int>> parity_check_matrix(int length, int seed) {
@@ -288,8 +309,6 @@ int main() {
     // Example usage:
     std::vector<int> in = {1,0,1,1,1,0,0,1,0,1,1,1,0,1,0,0,0,1,0,1,0};
 
-    int seed = 42;
-
     std::vector<std::vector<int>> H = parity_check_matrix(in.size(), 0);
 
     // Output H
@@ -302,11 +321,12 @@ int main() {
     }
 
     //TODO dimensin check
-    auto result = coding_matrix_systematic(H);
+    auto systematic = coding_matrix_systematic(H);
+    auto nonsystematic = coding_matrix(H);
 
     // Output H_new
     std::cout << "H_new:\n";
-    for (const auto& row : result.first) {
+    for (const auto& row : systematic.first) {
         for (int elem : row) {
             std::cout << elem << ' ';
         }
@@ -315,25 +335,50 @@ int main() {
 
     // Output G_systematic
     std::cout << "G_systematic:\n";
-    for (const auto& row : result.second) {
+    for (const auto& row : systematic.second) {
         for (int elem : row) {
             std::cout << elem << ' ';
         }
         std::cout << '\n';
     }
 
-    auto enc = encode(result.second, in);
+    std::cout << "G_NONsystematic:\n";
+    for (const auto& row : nonsystematic) {
+        for (int elem : row) {
+            std::cout << elem << ' ';
+        }
+        std::cout << '\n';
+    }
 
-    std::cout << "Encoded:\n";
-    for (const auto& elem : enc) {
+    auto encsys = encode(systematic.second, in);
+    auto encnonsys = encode(nonsystematic, in);
+
+    std::cout << "Encoded sys:\n";
+    for (const auto& elem : encsys) {
         std::cout << elem << ' ';
     }
     std::cout << '\n';
 
-    auto check = binaryproduct({enc}, transposeMatrix(result.first));
+    std::cout << "Encoded NONsys:\n";
+    for (const auto& elem : encnonsys) {
+        std::cout << elem << ' ';
+    }
+    std::cout << '\n';
 
-    std::cout << "Check:\n";
-    for (const auto& row : check) {
+    auto checksys = binaryproduct({encsys}, transposeMatrix(systematic.first));
+
+    std::cout << "Check sys:\n";
+    for (const auto& row : checksys) {
+        for (int elem : row) {
+            std::cout << elem << ' ';
+        }
+        std::cout << '\n';
+    }
+
+    auto checknonsys = binaryproduct({encnonsys}, transposeMatrix(H));
+
+    std::cout << "Check sys:\n";
+    for (const auto& row : checknonsys) {
         for (int elem : row) {
             std::cout << elem << ' ';
         }
