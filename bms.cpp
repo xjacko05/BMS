@@ -15,6 +15,16 @@
 #include <sstream>
 #include <chrono>
 #include <random>
+#include <cmath>
+
+void printMatrix(const std::vector<std::vector<int>>& H){
+    for (const auto& row : H) {
+        for (int elem : row) {
+            std::cout << elem << ' ';
+        }
+        std::cout << '\n';
+    }
+}
 
 std::vector<int> extractNthElements(const std::vector<std::vector<int>>& input, int n) {
     std::vector<int> result;
@@ -86,10 +96,49 @@ std::pair<std::vector<std::vector<int>>, std::vector<std::vector<int>>> gaussjor
     return std::make_pair(A, P);
 }
 
+std::pair<std::vector<std::vector<int>>, std::vector<int>> gausselimination(
+    const std::vector<std::vector<int>>& A, const std::vector<int>& b) {
+    std::vector<std::vector<int>> A_copy = A;
+    std::vector<int> b_copy = b;
+
+    int n = A_copy.size();
+    int k = A_copy[0].size();
+
+    for (int j = 0; j < std::min(k, n); ++j) {
+        std::vector<int> listedepivots;
+        for (int i = j; i < n; ++i) {
+            if (A_copy[i][j]) {
+                listedepivots.push_back(i);
+            }
+        }
+
+        if (!listedepivots.empty()) {
+            int pivot = *std::min_element(listedepivots.begin(), listedepivots.end());
+
+            if (pivot != j) {
+                std::swap(A_copy[j], A_copy[pivot]);
+                std::swap(b_copy[j], b_copy[pivot]);
+            }
+
+            for (int i = j + 1; i < n; ++i) {
+                if (A_copy[i][j]) {
+                    for (int col = 0; col < k; ++col) {
+                        A_copy[i][col] = abs(A_copy[i][col] - A_copy[j][col]);
+                    }
+                    b_copy[i] = abs(b_copy[i] - b_copy[j]);
+                }
+            }
+        }
+    }
+
+    return std::make_pair(A_copy, b_copy);
+}
+
 std::vector<std::vector<int>> binaryproduct(const std::vector<std::vector<int>>& matrix1, const std::vector<std::vector<int>>& matrix2) {
     // Check if matrices are compatible for multiplication
     if (matrix1.empty() || matrix2.empty() || matrix1[0].size() != matrix2.size()) {
         // Matrices cannot be multiplied
+        std::cerr << "Error: Matrices cannot be multiplied. Matrix 1: " << matrix1.size() << "x" << matrix1[0].size() << " Matrix 2: " << matrix2.size() << "x" << matrix2[0].size() << std::endl;
         return {};
     }
 
@@ -321,7 +370,50 @@ std::vector<int> encode(const std::vector<std::vector<int>>& tG, const std::vect
     return d[0];
 }
 
-void checkEncode(const std::vector<int>& enc, const std::vector<std::vector<int>>& H){
+std::vector<int> get_message(const std::vector<std::vector<int>>& tG, const std::vector<int>& x) {
+    int n_bits = tG[0].size();
+
+    auto [rtG, rx] = gausselimination(tG, x);
+
+    /*
+    printMatrix(rtG);
+    for (int elem : rx) {
+        std::cout << elem << ' ';
+    }
+    std::cout << '\n';
+    */
+
+    std::vector<int> message(n_bits, 0);
+
+    message[n_bits - 1] = rx[n_bits - 1];
+    /*
+    for (int i = n_bits - 2; i >= 0; --i) {
+        message[i] = rx[i];
+        message[i] -= binaryproduct(rtG[i], std::vector<int>(message.begin() + i + 1, message.end()));
+        message[i] -= binaryproduct(rtG[i], std::vector<int>(message.begin() + i + 1, message.end()));
+    }*/
+    for (int i = n_bits - 2; i >= 0; --i) {
+        message[i] = rx[i];
+        for (int j = i + 1; j < n_bits; ++j) {
+            message[i] -= rtG[i][j] * message[j];
+        }
+        message[i] %= 2;
+    }
+
+    for (int& bit : message) {
+        bit = abs(bit);
+    }
+    /*
+    for (int elem : message) {
+        std::cout << elem << ' ';
+    }
+    std::cout << '\n';
+    */
+
+    return message;
+}
+
+bool checkEncode(const std::vector<int>& enc, const std::vector<std::vector<int>>& H){
 
     auto check = binaryproduct({enc}, transposeMatrix(H));
     bool ok = true;
@@ -334,11 +426,15 @@ void checkEncode(const std::vector<int>& enc, const std::vector<std::vector<int>
         }
     }
 
+    /*
     if (ok){
         std::cout << "Check successful" << std::endl;
     }else{
         std::cout << "Check failed" << std::endl;
     }
+    */
+
+    return ok;
 }
 
 std::vector<int> AsciiToVector(const std::string& input) {
@@ -474,20 +570,388 @@ void MatrixToCsv(const std::vector<std::vector<int>>& data) {
     }
 }
 
-void printMatrix(const std::vector<std::vector<int>>& H){
-    for (const auto& row : H) {
-        for (int elem : row) {
-            std::cout << elem << ' ';
-        }
-        std::cout << '\n';
-    }
-}
-
 enum Mode {
     ENCODE,
     DECODE,
     NONE
 };
+
+
+
+int sign(double value) {
+    return (value > 0) ? 1 : -1;
+}
+
+void ldpcDecode(const std::vector<std::vector<int>>& parityCheckMatrix,
+                std::vector<int>& receivedMessage,
+                int maxIterations = 50) {
+    const int numVariableNodes = receivedMessage.size();
+    const int numCheckNodes = parityCheckMatrix.size();
+
+    // Initialization
+    std::vector<double> variableNodes(numVariableNodes, 0.0);
+
+    // Iterative message passing
+    for (int iteration = 0; iteration < maxIterations; ++iteration) {
+        // Update variable nodes
+        for (int i = 0; i < numVariableNodes; ++i) {
+            double product = 1.0;
+            for (int j : parityCheckMatrix[i]) {
+                product *= sign(variableNodes[j]);
+            }
+            receivedMessage[i] = (product < 0.0) ? 1 : 0;
+        }
+
+        // Update check nodes
+        for (int i = 0; i < numCheckNodes; ++i) {
+            for (int j : parityCheckMatrix[i]) {
+                variableNodes[j] = 2.0 * receivedMessage[i] - 1.0;
+            }
+        }
+    }
+
+    // Make decisions based on the final values of variable nodes
+    for (int i = 0; i < numVariableNodes; ++i) {
+        receivedMessage[i] = (variableNodes[i] > 0.0) ? 1 : 0;
+    }
+}
+
+
+std::vector<std::vector<double>> flipMatrix(const std::vector<std::vector<double>>& matrix) {
+    std::vector<std::vector<double>> resultMatrix = matrix;
+
+    for (auto& row : resultMatrix) {
+        for (double& value : row) {
+            // Toggle ones to zeroes and vice versa
+            value = (value == 0.0) ? 1.0 : 0.0;
+        }
+    }
+
+    return resultMatrix;
+}
+
+
+std::vector<int> belief(const std::vector<int>& codeword, const std::vector<std::vector<int>>& parityCheckMatrix) {
+    // Assuming codeword size is the same as the number of columns in the parity check matrix
+    int checkNodeSize = parityCheckMatrix.size();
+    int bitNodeSize = parityCheckMatrix[0].size();
+
+    std::vector<int> estimate = codeword;
+
+    // Initialize the message matrix with all zeros
+    //std::vector<std::vector<double>> msgBitToCheck_1(bitNodeSize, std::vector<double>(inputVector.begin(), inputVector.end()));
+    //std::vector<std::vector<double>> msgBitToCheck_0 = flipMatrix(msgBitToCheck_1);
+    std::vector<std::vector<double>> msgBitToCheck_1(checkNodeSize, std::vector<double>(bitNodeSize, 0.0));
+    std::vector<std::vector<double>> msgBitToCheck_0(checkNodeSize, std::vector<double>(bitNodeSize, 0.0));
+    std::vector<std::vector<double>> msgCheckToBit_1(checkNodeSize, std::vector<double>(bitNodeSize, 0.5));
+    std::vector<std::vector<double>> msgCheckToBit_0(checkNodeSize, std::vector<double>(bitNodeSize, 0.5));
+
+
+    for (int iter = 0; iter < 1000; ++iter){
+
+        if (checkEncode(estimate, parityCheckMatrix)){
+            std::cout << "BREAK\n";
+            break;
+        }
+
+        // Update messages from bit nodes to check nodes
+        for (int i = 0; i < bitNodeSize; ++i) {
+            for (int j = 0; j < checkNodeSize; ++j) {
+                if (parityCheckMatrix[j][i]){
+
+                    double num_0 = 1.0;
+                    double num_1 = 1.0;
+                    double den_0 = 1.0;
+                    double den_1 = 1.0;
+                    for (int k = 0; k < checkNodeSize; ++k) {
+                        if (parityCheckMatrix[k][i]){
+                            if (k != j) {
+                                num_0 *= msgCheckToBit_0[k][i];
+                                num_1 *= msgCheckToBit_1[k][i];
+                                den_1 *= (1 - msgCheckToBit_1[k][i]);
+                                den_0 *= (1 - msgCheckToBit_0[k][i]);
+                            }
+                        }
+                    }
+                    msgBitToCheck_0[j][i] = num_0 / (num_0 + den_0);
+                    msgBitToCheck_1[j][i] = num_1 / (num_1 + den_1);
+
+                }
+            }
+        }
+
+        // Update messages from check nodes to bit nodes
+        for (int i = 0; i < checkNodeSize; ++i) {
+            for (int j = 0; j < bitNodeSize; ++j) {
+                if (parityCheckMatrix[i][j]){
+
+                    double product = 1.0;
+                    for (int k = 0; k < bitNodeSize; ++k) {
+                        if (parityCheckMatrix[i][k]){
+                            if (k != j) {
+                                product *= (2.0*msgBitToCheck_1[i][k] - 1);
+                            }
+                        }
+                    }
+                    msgCheckToBit_0[i][j] = 0.5 + 0.5*product;
+                    msgCheckToBit_1[i][j] = 1.0 - msgCheckToBit_0[i][j];
+                }
+            }
+        }
+
+        for (int i = 0; i < bitNodeSize; ++i) {
+            for (int j = 0; j < checkNodeSize; ++j) {
+                if (parityCheckMatrix[j][i]){
+
+                    double product_0 = 1.0;
+                    double product_1 = 1.0;
+                    for (int k = 0; k < checkNodeSize; ++k) {
+                        if (parityCheckMatrix[k][i]){
+                            product_0 *= msgCheckToBit_0[k][i];
+                            product_1 *= msgCheckToBit_1[k][i];
+                        }
+                    }
+                    if (product_1 > product_0){
+                        estimate[i] = 1;
+                    }else{
+                        estimate[i] = 0;
+                    }
+                    std::cout << "HERE\n";
+                }
+            }
+        }
+    }
+
+
+    return estimate;
+}
+
+
+std::vector<int> belief2(const std::vector<int>& codeword, const std::vector<std::vector<int>>& parityCheckMatrix) {
+    // Assuming codeword size is the same as the number of columns in the parity check matrix
+    int checkNodeSize = parityCheckMatrix.size();
+    int bitNodeSize = parityCheckMatrix[0].size();
+
+    std::vector<int> estimate = codeword;
+
+    // Initialize the message matrix with all zeros
+    //std::vector<std::vector<double>> msgBitToCheck_1(bitNodeSize, std::vector<double>(inputVector.begin(), inputVector.end()));
+    //std::vector<std::vector<double>> msgBitToCheck_0 = flipMatrix(msgBitToCheck_1);
+    std::vector<std::vector<double>> msgBitToCheck_1(checkNodeSize, std::vector<double>(bitNodeSize, 0.5));
+    std::vector<std::vector<double>> msgBitToCheck_0(checkNodeSize, std::vector<double>(bitNodeSize, 0.5));
+    std::vector<std::vector<double>> msgCheckToBit_1(checkNodeSize, std::vector<double>(bitNodeSize, 0.0));
+    std::vector<std::vector<double>> msgCheckToBit_0(checkNodeSize, std::vector<double>(bitNodeSize, 0.0));
+
+
+    for (int iter = 0; iter < 100; ++iter){
+
+        if (checkEncode(estimate, parityCheckMatrix)){
+            break;
+        }
+
+        // Update messages from check nodes to bit nodes
+        for (int i = 0; i < checkNodeSize; ++i) {
+            for (int j = 0; j < bitNodeSize; ++j) {
+                if (parityCheckMatrix[i][j]){
+
+                    double product = 1.0;
+                    for (int k = 0; k < bitNodeSize; ++k) {
+                        if (parityCheckMatrix[i][k]){
+                            if (k != j) {
+                                product *= (1.0 - 2.0*msgBitToCheck_1[i][k]);
+                            }
+                        }
+                    }
+                    msgCheckToBit_0[i][j] = 0.5 + 0.5*product;
+                    msgCheckToBit_1[i][j] = 1.0 - msgCheckToBit_0[i][j];
+                }
+            }
+        }
+
+        // Update messages from bit nodes to check nodes
+        for (int i = 0; i < bitNodeSize; ++i) {
+            for (int j = 0; j < checkNodeSize; ++j) {
+                if (parityCheckMatrix[j][i]){
+
+                    double product_0 = 1.0;
+                    double product_1 = 1.0;
+                    for (int k = 0; k < checkNodeSize; ++k) {
+                        if (parityCheckMatrix[k][i]){
+                            if (k != j) {
+                                product_0 *= msgCheckToBit_0[k][i];
+                                product_1 *= msgCheckToBit_1[k][i];
+                            }
+                        }
+                    }
+                    double sum = 0.5*product_0 + 0.5*product_1;
+                    msgBitToCheck_0[j][i] = (0.5*product_0) / sum;
+                    msgBitToCheck_1[j][i] = (0.5*product_1) / sum;
+
+                }
+            }
+        }
+
+        for (int i = 0; i < bitNodeSize; ++i) {
+            for (int j = 0; j < checkNodeSize; ++j) {
+                if (parityCheckMatrix[j][i]){
+
+                    double product_0 = 1.0;
+                    double product_1 = 1.0;
+                    for (int k = 0; k < checkNodeSize; ++k) {
+                        if (parityCheckMatrix[k][i]){
+                            product_0 *= msgCheckToBit_0[k][i];
+                            product_1 *= msgCheckToBit_1[k][i];
+                        }
+                    }
+                    if (product_1 > product_0){
+                        estimate[i] = 1;
+                    }else{
+                        estimate[i] = 0;
+                    }
+
+                }
+            }
+        }
+    }
+
+
+    return estimate;
+}
+
+
+std::vector<int> hardDecdision2(const std::vector<int>& codeword, const std::vector<std::vector<int>>& parityCheckMatrix) {
+    // Assuming codeword size is the same as the number of columns in the parity check matrix
+    int checkNodeSize = parityCheckMatrix.size();
+    int bitNodeSize = parityCheckMatrix[0].size();
+
+    std::vector<int> estimate = codeword;
+
+    // Initialize the message matrix with all zeros
+    //std::vector<std::vector<double>> msgBitToCheck_1(bitNodeSize, std::vector<double>(inputVector.begin(), inputVector.end()));
+    //std::vector<std::vector<double>> msgBitToCheck_0 = flipMatrix(msgBitToCheck_1);
+    //std::vector<std::vector<double>> msgBitToCheck_1(checkNodeSize, std::vector<double>(bitNodeSize, 0.5));
+    //std::vector<std::vector<double>> msgBitToCheck_0(checkNodeSize, std::vector<double>(bitNodeSize, 0.5));
+    //std::vector<std::vector<double>> msgCheckToBit_1(checkNodeSize, std::vector<double>(bitNodeSize, 0.0));
+    //std::vector<std::vector<double>> msgCheckToBit_0(checkNodeSize, std::vector<double>(bitNodeSize, 0.0));
+
+    
+    std::vector<std::vector<int>> msgCheckToBit(checkNodeSize, std::vector<int>(bitNodeSize, 0));
+    std::vector<std::vector<int>> flipped(checkNodeSize, std::vector<int>(bitNodeSize, 0));
+
+
+    for (int iter = 0; iter < 100; ++iter){
+
+        if (checkEncode(estimate, parityCheckMatrix)){
+            break;
+        }
+        
+        // Update messages from check nodes to bit nodes
+        for (int i = 0; i < checkNodeSize; ++i) {
+            for (int j = 0; j < bitNodeSize; ++j) {
+                if (parityCheckMatrix[i][j]){
+
+                    int sum = 0;
+                    for (int k = 0; k < bitNodeSize; ++k) {
+                        if (parityCheckMatrix[i][k]){
+                            if (k != j) {
+                                sum += estimate[k];
+                            }
+                        }
+                    }
+                    sum %= 2;
+                    msgCheckToBit[i][j] = sum;
+                }
+            }
+        }
+
+        for (int i = 0; i < bitNodeSize; ++i) {
+
+            int sum_0 = 0;
+            int sum_1 = 0;
+
+            if (codeword[i]){
+                sum_1++;
+            }else{
+                sum_0++;
+            }
+
+
+            for (int j = 0; j < checkNodeSize; ++j) {
+                if (parityCheckMatrix[j][i]){
+
+                    if (msgCheckToBit[j][i]){
+                        sum_1++;
+                    }else{
+                        sum_0++;
+                    }
+                }
+            }
+
+            if (sum_1 > sum_0) {
+                estimate[i] = 1;
+            }else if (sum_1 < sum_0) {
+                estimate[i] = 0;
+            }
+
+
+        }
+    }
+
+    return estimate;
+}
+
+std::vector<int> hardDecdision(const std::vector<int>& codeword, const std::vector<std::vector<int>>& parityCheckMatrix) {
+    // Assuming codeword size is the same as the number of columns in the parity check matrix
+    int checkNodeSize = parityCheckMatrix.size();
+    int bitNodeSize = parityCheckMatrix[0].size();
+
+    std::vector<int> estimate = codeword;
+    std::vector<std::vector<int>> msgCheckToBit(checkNodeSize, std::vector<int>(bitNodeSize, 0));
+    std::vector<int> flipped(bitNodeSize, 0);
+
+
+    for (int iter = 0; iter < 100; ++iter){
+
+        if (checkEncode(estimate, parityCheckMatrix)){
+            break;
+        }
+
+        std::vector<int> score(bitNodeSize, 0);
+        
+        // Update messages from check nodes to bit nodes
+        for (int i = 0; i < checkNodeSize; ++i) {
+            for (int j = 0; j < bitNodeSize; ++j) {
+                if (parityCheckMatrix[i][j]){
+
+                    int sum = 0;
+                    for (int k = 0; k < bitNodeSize; ++k) {
+                        if (parityCheckMatrix[i][k]){
+                            if (k != j) {
+                                sum += estimate[k];
+                            }
+                        }
+                    }
+                    sum %= 2;
+                    if (estimate[j] != sum){
+                        score[j]++;
+                    }
+                }
+            }
+        }
+
+        auto max_it = std::max_element(score.begin(), score.end());
+        int index = std::distance(score.begin(), max_it);
+        if (estimate[index] == 0){
+            estimate[index] = 1;
+        }else{
+            estimate[index] = 0;
+        }
+        flipped[index] = 1;
+    }
+
+    return estimate;
+}
+
 
 /* handles profram flow and argument parsing */
 int main(int argc, char *argv[]){
@@ -523,6 +987,7 @@ int main(int argc, char *argv[]){
 
         auto binary = AsciiToVector(input);
 
+        //TODO check input matrix dimensions
         if (matrixFileName.empty()){
             parityCheckMatrix = parity_check_matrix(binary.size(), 0);
         }else{
@@ -532,8 +997,6 @@ int main(int argc, char *argv[]){
         auto codingMatrix = coding_matrix(parityCheckMatrix);
 
         auto encodedBinary = encode(codingMatrix, binary);
-
-        checkEncode(encodedBinary, parityCheckMatrix);
 
         if (matrixFileName.empty()){
             MatrixToCsv(parityCheckMatrix);
@@ -548,10 +1011,20 @@ int main(int argc, char *argv[]){
         auto binary = BinaryToVector(input);
 
         parityCheckMatrix = csvToMatrix(matrixFileName);
+
+        auto codingMatrix = coding_matrix(parityCheckMatrix);
+
+        //ldpcDecode(parityCheckMatrix, binary, 1);
+
+        auto correctedBinary = hardDecdision(binary, parityCheckMatrix);
+
+        auto decodedBinary = get_message(codingMatrix, correctedBinary);
         
-        if (!binary.empty()){
+        if (!correctedBinary.empty()){
             
-            std::cout << VectorToAscii(binary) << std::endl;
+            std::cout << VectorToBinary(correctedBinary) << std::endl;
+            std::cout << VectorToBinary(decodedBinary) << std::endl;
+            std::cout << VectorToAscii(decodedBinary) << std::endl;
         }
     }
 
