@@ -360,7 +360,9 @@ std::vector<std::vector<int>> parity_check_matrix(int length, int seed) {
 }
 
 
-std::vector<int> encode(const std::vector<std::vector<int>>& tG, const std::vector<int>& v) {
+std::vector<int> encode(const std::vector<std::vector<int>>& parityCheckMatrix, const std::vector<int>& v) {
+
+    auto tG = coding_matrix(parityCheckMatrix);
 
     std::vector<std::vector<int>> v_2;
     v_2.push_back(v);
@@ -819,7 +821,7 @@ std::vector<int> belief2(const std::vector<int>& codeword, const std::vector<std
 }
 
 
-std::vector<int> hardDecdision2(const std::vector<int>& codeword, const std::vector<std::vector<int>>& parityCheckMatrix) {
+std::vector<int> hardDecision2(const std::vector<std::vector<int>>& parityCheckMatrix, const std::vector<int>& codeword) {
     // Assuming codeword size is the same as the number of columns in the parity check matrix
     int checkNodeSize = parityCheckMatrix.size();
     int bitNodeSize = parityCheckMatrix[0].size();
@@ -900,27 +902,142 @@ std::vector<int> hardDecdision2(const std::vector<int>& codeword, const std::vec
     return estimate;
 }
 
-std::vector<int> hardDecdision(const std::vector<int>& codeword, const std::vector<std::vector<int>>& parityCheckMatrix) {
+std::vector<int> minimalBitFlipsChar(const std::vector<int>& binaryRepresentation) {
+    // Convert the binary representation to ASCII character
+    char originalChar = 0;
+    for (int i = 7; i >= 0; --i) {
+        originalChar |= binaryRepresentation[i] << (7 - i);
+    }
+
+    // Check if the character is already alphanumeric
+    if ((originalChar >= '0' && originalChar <= '9') || (originalChar >= 'A' && originalChar <= 'Z') ||
+        (originalChar >= 'a' && originalChar <= 'z')) {
+        return binaryRepresentation;  // No bit flips needed, return the original binary representation
+    }
+
+    // Find the closest alphanumeric character with the least number of bit flips
+    char closestAlphanumeric = originalChar;
+    int minFlips = 8;  // Initialize with the maximum possible flips
+
+
+    for (char target = '0'; target <= '9'; ++target) {
+        int flips = 0;
+        for (int i = 0; i < 8; ++i) {
+            if (((target >> i) & 1) != ((originalChar >> i) & 1)) {
+                flips++;
+            }
+        }
+
+        if (flips < minFlips) {
+            minFlips = flips;
+            closestAlphanumeric = target;
+        }
+    }
+
+    for (char target = 'A'; target <= 'Z'; ++target) {
+        int flips = 0;
+        for (int i = 0; i < 8; ++i) {
+            if (((target >> i) & 1) != ((originalChar >> i) & 1)) {
+                flips++;
+            }
+        }
+
+        if (flips < minFlips) {
+            minFlips = flips;
+            closestAlphanumeric = target;
+        }
+    }
+
+    for (char target = 'a'; target <= 'z'; ++target) {
+        int flips = 0;
+        for (int i = 0; i < 8; ++i) {
+            if (((target >> i) & 1) != ((originalChar >> i) & 1)) {
+                flips++;
+            }
+        }
+
+        if (flips < minFlips) {
+            minFlips = flips;
+            closestAlphanumeric = target;
+        }
+    }
+
+    
+    std::vector<int> closestBinaryRepresentation(8, 0);  // Initialize with all zeros
+    for (int i = 7; i >= 0; --i) {
+        closestBinaryRepresentation.push_back((closestAlphanumeric >> i) & 1);
+    }
+
+    return closestBinaryRepresentation;
+}
+
+std::vector<int> minimalBitFlipsString(const std::vector<int>& asciiString) {
+    std::vector<int> result;
+
+    // Process consecutive 8-element subvectors
+    for (size_t i = 0; i < asciiString.size(); i += 8) {
+        // Get the subvector of size 8
+        std::vector<int> subVector(asciiString.begin() + i, asciiString.begin() + i + 8);
+
+        // Call minimalBitFlipsChar on the subvector
+        std::vector<int> subResult = minimalBitFlipsChar(subVector);
+
+        // Append the result to the overall result vector
+        result.insert(result.end(), subResult.begin(), subResult.end());
+    }
+
+    return result;
+}
+
+bool checkAscii(const std::vector<int>& binaryVector) {
+    // Ensure the binary vector size is a multiple of 8
+    size_t size = binaryVector.size();
+
+    for (size_t i = 0; i < size; i += 8) {
+        int asciiValue = 0;
+        for (size_t j = 0; j < 8; ++j) {
+            asciiValue = (asciiValue << 1) | binaryVector[i + j];
+        }
+        if (!std::isalnum(static_cast<char>(asciiValue))){
+            return false;
+        }
+    }
+
+    return true;
+}
+
+std::vector<int> hardDecision(const std::vector<std::vector<int>>& parityCheckMatrix, const std::vector<int>& codeword) {
     // Assuming codeword size is the same as the number of columns in the parity check matrix
     int checkNodeSize = parityCheckMatrix.size();
     int bitNodeSize = parityCheckMatrix[0].size();
+
+    auto codingMatrix = coding_matrix(parityCheckMatrix);
 
     std::vector<int> estimate = codeword;
     std::vector<std::vector<int>> msgCheckToBit(checkNodeSize, std::vector<int>(bitNodeSize, 0));
     std::vector<int> flipped(bitNodeSize, 0);
 
 
-    for (int iter = 0; iter < 100; ++iter){
+    for (int iter = 0; iter < 50; ++iter){
 
         if (checkEncode(estimate, parityCheckMatrix)){
-            break;
+            auto message = get_message(codingMatrix, estimate);
+            if (checkAscii(message)){
+                //std::cout << "Solution found on:\t" << iter << std::endl;
+                return message;
+            }
+            //std::cout << iter << "\t" << VectorToAscii(minimalBitFlipsString(message)) << std::endl;
         }
+        //std::cout << iter << "\t" << VectorToAscii(minimalBitFlipsString(get_message(codingMatrix, estimate))) << std::endl;
 
         std::vector<int> score(bitNodeSize, 0);
         
         // Update messages from check nodes to bit nodes
         for (int i = 0; i < checkNodeSize; ++i) {
             for (int j = 0; j < bitNodeSize; ++j) {
+                if (flipped[j] == 3){
+                    continue;
+                }
                 if (parityCheckMatrix[i][j]){
 
                     int sum = 0;
@@ -939,6 +1056,11 @@ std::vector<int> hardDecdision(const std::vector<int>& codeword, const std::vect
             }
         }
 
+        //for (int elem : score) {
+        //    std::cout << elem << ' ';
+        //}
+        //std::cout << '\n';
+
         auto max_it = std::max_element(score.begin(), score.end());
         int index = std::distance(score.begin(), max_it);
         if (estimate[index] == 0){
@@ -946,10 +1068,17 @@ std::vector<int> hardDecdision(const std::vector<int>& codeword, const std::vect
         }else{
             estimate[index] = 0;
         }
-        flipped[index] = 1;
+        flipped[index]++;
+        
+    }
+    //std::cout << "Solution NOT found" << std::endl;
+
+    auto message = get_message(codingMatrix, codeword);
+    if (!checkAscii(message)){
+        return minimalBitFlipsString(message);
     }
 
-    return estimate;
+    return message;
 }
 
 
@@ -973,7 +1102,7 @@ int main(int argc, char *argv[]){
     }
 
     if (matrixFileName.empty() && mode == Mode::DECODE){
-        std::cerr << "Decoding requires -m argument" << std::endl;
+        std::cerr << "Error: Decoding requires -m argument" << std::endl;
         return 1;
     }
 
@@ -987,45 +1116,30 @@ int main(int argc, char *argv[]){
 
         auto binary = AsciiToVector(input);
 
-        //TODO check input matrix dimensions
         if (matrixFileName.empty()){
             parityCheckMatrix = parity_check_matrix(binary.size(), 0);
+            MatrixToCsv(parityCheckMatrix);
         }else{
             parityCheckMatrix = csvToMatrix(matrixFileName);
+            if (parityCheckMatrix[0].size() / 2 != binary.size()){
+                std::cerr << "Error: Incompatible matrix and input sizes" << std::endl;
+                return 1;
+            }
         }
 
-        auto codingMatrix = coding_matrix(parityCheckMatrix);
+        auto encodedBinary = encode(parityCheckMatrix, binary);
 
-        auto encodedBinary = encode(codingMatrix, binary);
-
-        if (matrixFileName.empty()){
-            MatrixToCsv(parityCheckMatrix);
-        }
-
-        if (!encodedBinary.empty()){
-            
-            std::cout << VectorToBinary(encodedBinary) << std::endl;
-        }
+        std::cout << VectorToBinary(encodedBinary) << std::endl;
+        
     }else if (mode == Mode::DECODE){
 
         auto binary = BinaryToVector(input);
 
         parityCheckMatrix = csvToMatrix(matrixFileName);
 
-        auto codingMatrix = coding_matrix(parityCheckMatrix);
-
-        //ldpcDecode(parityCheckMatrix, binary, 1);
-
-        auto correctedBinary = hardDecdision(binary, parityCheckMatrix);
-
-        auto decodedBinary = get_message(codingMatrix, correctedBinary);
+        auto decodedBinary = hardDecision(parityCheckMatrix, binary);
         
-        if (!correctedBinary.empty()){
-            
-            std::cout << VectorToBinary(correctedBinary) << std::endl;
-            std::cout << VectorToBinary(decodedBinary) << std::endl;
-            std::cout << VectorToAscii(decodedBinary) << std::endl;
-        }
+        std::cout << VectorToAscii(decodedBinary) << std::endl;
     }
 
     return 0;
