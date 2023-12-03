@@ -5,6 +5,7 @@
  * by Martin Jacko <xjacko05@stud.fit.vutbr.cz>
  **/
 
+
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -12,15 +13,18 @@
 #include <chrono>
 #include <random>
 
+
 enum Mode {
     ENCODE,
     DECODE,
     NONE
 };
 
+
 //print matrix (debug purposes)
 void printMatrix(const std::vector<std::vector<int>>& H){
 
+    //iterate over rows and columns
     for (const auto& row : H){
         for (int elem : row){
             std::cout << elem << ' ';
@@ -28,6 +32,7 @@ void printMatrix(const std::vector<std::vector<int>>& H){
         std::cout << std::endl;
     }
 }
+
 
 //extract n-th column of matrix
 std::vector<int> extractNthColumn(const std::vector<std::vector<int>>& input, int n){
@@ -40,6 +45,7 @@ std::vector<int> extractNthColumn(const std::vector<std::vector<int>>& input, in
 
     return result;
 }
+
 
 //generate identity matrix of given size
 std::vector<std::vector<int>> generateIdentityMatrix(int n){
@@ -54,6 +60,7 @@ std::vector<std::vector<int>> generateIdentityMatrix(int n){
 
     return identityMatrix;
 }
+
 
 //perform Gauss-Jordan elimination, e.g. compute the binary row reduced echelon form of X
 //returns 2 matrices, row reduced form of input and transformations applied to identity matrix
@@ -101,7 +108,7 @@ std::pair<std::vector<std::vector<int>>, std::vector<std::vector<int>>> gaussJor
                             P[i][k] = abs(P[i][k] - P[pivot_old][k]);
                         }
                     }
-                    //if the matrix has more rows than columns, update remaining elements in P
+                    //if matrix has more rows than columns, update remaining elements in P
                     if (n < m){
                         for (int k = n; k < m; ++k){
                             P[i][k] = abs(P[i][k] - P[pivot_old][k]);
@@ -119,6 +126,7 @@ std::pair<std::vector<std::vector<int>>, std::vector<std::vector<int>>> gaussJor
 
     return std::make_pair(A, P);
 }
+
 
 //perform Gauss elimination on system of linear equations
 //returns a pair of matrices, first matrix is the upper triangular form of input, second matrix is modified vector b
@@ -168,6 +176,7 @@ std::pair<std::vector<std::vector<int>>, std::vector<int>> gaussElimination(cons
     return std::make_pair(A_copy, b_copy);
 }
 
+
 //matrix multiplication with dimensions checking
 std::vector<std::vector<int>> binaryproduct(const std::vector<std::vector<int>>& matrix1, const std::vector<std::vector<int>>& matrix2){
 
@@ -199,17 +208,18 @@ std::vector<std::vector<int>> binaryproduct(const std::vector<std::vector<int>>&
     return result;
 }
 
+
 //matrix transposition
 std::vector<std::vector<int>> transposeMatrix(const std::vector<std::vector<int>>& matrix){
 
-    // Get the number of rows and columns in the original matrix
+    //get the number of rows and columns in the original matrix
     int rows = matrix.size();
     int cols = matrix[0].size();
 
-    // Initialize the transposed matrix with zeros
+    //initialize the transposed matrix with zeros
     std::vector<std::vector<int>> transposedMatrix(cols, std::vector<int>(rows, 0));
 
-    // Perform the transpose operation
+    //perform the transpose operation
     for (int i = 0; i < rows; ++i){
         for (int j = 0; j < cols; ++j){
             transposedMatrix[j][i] = matrix[i][j];
@@ -219,6 +229,7 @@ std::vector<std::vector<int>> transposeMatrix(const std::vector<std::vector<int>
     return transposedMatrix;
 }
 
+
 //generate a pseudo-random regular parity-check matrix
 //based on pyldpc/code.py/parity_check_matrix
 std::vector<std::vector<int>> generateParityCheckMatrix(int length){
@@ -227,7 +238,7 @@ std::vector<std::vector<int>> generateParityCheckMatrix(int length){
     int seed = std::chrono::steady_clock::now().time_since_epoch().count();
     std::mt19937 rng(seed);
 
-    //values as pre assignment
+    //values as per assignment
     int n_code = 2 * length;
     int d_v = length - 1;
     int d_c = length;
@@ -259,6 +270,7 @@ std::vector<std::vector<int>> generateParityCheckMatrix(int length){
 
     return H;
 }
+
 
 //generate LDPC transposed coding matrix from parity-check matrix using Gauss elimination
 //based on pyldpc/code.py/coding_matrix
@@ -334,6 +346,7 @@ std::vector<int> getMessage(const std::vector<std::vector<int>>& tG, const std::
     return message;
 }
 
+
 //check if given input is codeword by checking if product of input and parity check matrix is equal to zero
 bool isCodeWord(const std::vector<int>& enc, const std::vector<std::vector<int>>& H){
 
@@ -352,143 +365,25 @@ bool isCodeWord(const std::vector<int>& enc, const std::vector<std::vector<int>>
     return check;
 }
 
-//converts filtered program ASCII input into binary vector form
-std::vector<int> AsciiToVector(const std::string& input){
 
-    std::vector<int> binaryASCII;
-
-    for (char ch : input){
-        //ignore non-alphanumeric characters
-        if (std::isalnum(ch)){
-            //convert the character to its ASCII value
-            int asciiValue = static_cast<int>(ch);
-
-            int binary[8] = {0,0,0,0,0,0,0,0};
-            int j = 0;
-
-            while (asciiValue > 0){ 
-
-                binary[j++] = asciiValue % 2;
-                asciiValue = asciiValue / 2;
-            }
-
-            for (int k = 8 - 1; k >= 0; --k){
-                binaryASCII.push_back(binary[k]);
-            }
-        }
-    }
-
-    return binaryASCII;
-}
-
-//converts filtered program binary input into binary vector form
-std::vector<int> BinaryToVector(const std::string& input){
-
-    std::vector<int> binaryVector;
-
-    for (char ch : input){
-        //ignore non-binary characters
-        if (ch == '0' || ch == '1'){
-            binaryVector.push_back(ch - '0');
-        }
-    }
-
-    return binaryVector;
-}
-
-//convert binary vector to binary string
-std::string VectorToBinary(const std::vector<int>& inputVector){
-
-    std::stringstream ss;
-
-    for (int value : inputVector){
-        ss << value;
-    }
-
-    return ss.str();
-}
-
-//convert binary vector to ASCII string
-std::string VectorToAscii(const std::vector<int>& binaryVector){
+//check if given vecotr value represents alphanumeric ASCII character
+bool isAscii(const std::vector<int>& binaryVector){
 
     size_t size = binaryVector.size();
 
-    std::string asciiString;
     for (size_t i = 0; i < size; i += 8){
         int asciiValue = 0;
         for (size_t j = 0; j < 8; ++j){
             asciiValue = (asciiValue << 1) | binaryVector[i + j];
         }
-        asciiString.push_back(static_cast<char>(asciiValue));
-    }
-
-    return asciiString;
-}
-
-//load matrix from a given file
-std::vector<std::vector<int>> csvToMatrix(const std::string& filename){
-
-    std::vector<std::vector<int>> matrix;
-
-    std::ifstream file(filename);
-    if (!file.is_open()){
-        std::cerr << "Error: Unable to open file " << filename << std::endl;
-        return matrix;
-    }
-
-    std::string line;
-    while (std::getline(file, line)){
-        std::istringstream lineStream(line);
-        std::vector<int> row;
-
-        //split each cell using both comma and semicolon as delimiters
-        std::string cell;
-        while (std::getline(lineStream, cell, ',')){
-            if (cell.empty()){
-                continue;
-            }
-            std::istringstream cellStream(cell);
-            std::string value;
-            while (std::getline(cellStream, value, ';')){
-                if (value.empty()){
-                    continue;
-                }
-                try {
-                    int intValue = std::stoi(value);
-                    row.push_back(intValue);
-                } catch (...){
-                    //cells with non-integer values are treated as zero
-                    std::cerr << "Error: Invalid value in file " << filename << ": " << value << ", value treated as 0" << std::endl;
-                    row.push_back(0);
-                }
-            }
+        if (!std::isalnum(static_cast<char>(asciiValue))){
+            return false;
         }
-
-        matrix.push_back(row);
     }
 
-    return matrix;
+    return true;
 }
 
-//save generated parity check matrix to file in csv format
-void MatrixToCsv(const std::vector<std::vector<int>>& data){
-
-    std::ofstream file("matica.csv");
-    if (!file.is_open()){
-        std::cerr << "Error: Unable to open file matica.csv for writing." << std::endl;
-        return;
-    }
-
-    for (const auto& row : data){
-        for (size_t i = 0; i < row.size(); ++i){
-            file << row[i];
-            if (i < row.size() - 1){
-                file << ',';
-            }
-        }
-        file << '\n';
-    }
-}
 
 //compute and perform minimal adjustments to ASCII character so that it will become alphanumeric
 std::vector<int> minimalBitFlipsChar(const std::vector<int>& binaryRepresentation){
@@ -560,6 +455,7 @@ std::vector<int> minimalBitFlipsChar(const std::vector<int>& binaryRepresentatio
     return closestBinaryRepresentation;
 }
 
+
 //compute and perform minimal adjustments to ASCII string so that it will become alphanumeric
 std::vector<int> minimalBitFlipsString(const std::vector<int>& asciiString){
 
@@ -578,28 +474,10 @@ std::vector<int> minimalBitFlipsString(const std::vector<int>& asciiString){
     return result;
 }
 
-//check if given value represents alphanumeric ASCII character
-bool checkAscii(const std::vector<int>& binaryVector){
-
-    size_t size = binaryVector.size();
-
-    for (size_t i = 0; i < size; i += 8){
-        int asciiValue = 0;
-        for (size_t j = 0; j < 8; ++j){
-            asciiValue = (asciiValue << 1) | binaryVector[i + j];
-        }
-        if (!std::isalnum(static_cast<char>(asciiValue))){
-            return false;
-        }
-    }
-
-    return true;
-}
-
 
 //implementation of Hard-decision decoding using bit nodes and check nodes in Tanner graph 
 //inspired by section 3.1 of https://www.bernh.net/media/download/papers/ldpc.pdf
-std::vector<int> hardDecision(const std::vector<std::vector<int>>& parityCheckMatrix, const std::vector<int>& codeword){
+std::vector<int> decode(const std::vector<std::vector<int>>& parityCheckMatrix, const std::vector<int>& codeword){
 
     //get the size of check and bit nodes
     int checkNodeSize = parityCheckMatrix.size();
@@ -623,7 +501,7 @@ std::vector<int> hardDecision(const std::vector<std::vector<int>>& parityCheckMa
             //retrieve the original message from the estimate
             auto message = getMessage(codingMatrix, estimate);
             //check if the decoded message consists of valid alphanumeric ASCII characters
-            if (checkAscii(message)){
+            if (isAscii(message)){
                 return message;
             }
         }
@@ -673,12 +551,156 @@ std::vector<int> hardDecision(const std::vector<std::vector<int>>& parityCheckMa
     //if the correcting process did not yield valid ASCII codeword, attempt to decode anyways
     auto message = getMessage(codingMatrix, codeword);
     //check if decoded message consists only of alphanumeric ASCII characters
-    if (!checkAscii(message)){
+    if (!isAscii(message)){
         //correct no alphanumeric ASCII characters to closest viable alternative (least bits flipped required to do so)
         return minimalBitFlipsString(message);
     }
 
     return message;
+}
+
+
+//converts filtered program ASCII input into binary vector form
+std::vector<int> AsciiToVector(const std::string& input){
+
+    std::vector<int> binaryASCII;
+
+    for (char ch : input){
+        //ignore non-alphanumeric characters
+        if (std::isalnum(ch)){
+            //convert the character to its ASCII value
+            int asciiValue = static_cast<int>(ch);
+
+            int binary[8] = {0,0,0,0,0,0,0,0};
+            int j = 0;
+
+            while (asciiValue > 0){ 
+
+                binary[j++] = asciiValue % 2;
+                asciiValue = asciiValue / 2;
+            }
+
+            for (int k = 8 - 1; k >= 0; --k){
+                binaryASCII.push_back(binary[k]);
+            }
+        }
+    }
+
+    return binaryASCII;
+}
+
+
+//converts filtered program binary input into binary vector form
+std::vector<int> BinaryToVector(const std::string& input){
+
+    std::vector<int> binaryVector;
+
+    for (char ch : input){
+        //ignore non-binary characters
+        if (ch == '0' || ch == '1'){
+            binaryVector.push_back(ch - '0');
+        }
+    }
+
+    return binaryVector;
+}
+
+
+//convert binary vector to binary string
+std::string VectorToBinary(const std::vector<int>& inputVector){
+
+    std::stringstream ss;
+
+    for (int value : inputVector){
+        ss << value;
+    }
+
+    return ss.str();
+}
+
+
+//convert binary vector to ASCII string
+std::string VectorToAscii(const std::vector<int>& binaryVector){
+
+    size_t size = binaryVector.size();
+
+    std::string asciiString;
+    for (size_t i = 0; i < size; i += 8){
+        int asciiValue = 0;
+        for (size_t j = 0; j < 8; ++j){
+            asciiValue = (asciiValue << 1) | binaryVector[i + j];
+        }
+        asciiString.push_back(static_cast<char>(asciiValue));
+    }
+
+    return asciiString;
+}
+
+
+//load matrix from a given file
+std::vector<std::vector<int>> csvToMatrix(const std::string& filename){
+
+    std::vector<std::vector<int>> matrix;
+
+    std::ifstream file(filename);
+    if (!file.is_open()){
+        std::cerr << "Error: Unable to open file " << filename << std::endl;
+        return matrix;
+    }
+
+    std::string line;
+    while (std::getline(file, line)){
+        std::istringstream lineStream(line);
+        std::vector<int> row;
+
+        //split each cell using both comma and semicolon as delimiters
+        std::string cell;
+        while (std::getline(lineStream, cell, ',')){
+            if (cell.empty()){
+                continue;
+            }
+            std::istringstream cellStream(cell);
+            std::string value;
+            while (std::getline(cellStream, value, ';')){
+                if (value.empty()){
+                    continue;
+                }
+                try {
+                    int intValue = std::stoi(value);
+                    row.push_back(intValue);
+                } catch (...){
+                    //cells with non-integer values are treated as zero
+                    std::cerr << "Error: Invalid value in file " << filename << ": " << value << ", value treated as 0" << std::endl;
+                    row.push_back(0);
+                }
+            }
+        }
+
+        matrix.push_back(row);
+    }
+
+    return matrix;
+}
+
+
+//save generated parity check matrix to file in csv format
+void MatrixToCsv(const std::vector<std::vector<int>>& data){
+
+    std::ofstream file("matica.csv");
+    if (!file.is_open()){
+        std::cerr << "Error: Unable to open file matica.csv for writing." << std::endl;
+        return;
+    }
+
+    for (const auto& row : data){
+        for (size_t i = 0; i < row.size(); ++i){
+            file << row[i];
+            if (i < row.size() - 1){
+                file << ',';
+            }
+        }
+        file << '\n';
+    }
 }
 
 
@@ -702,8 +724,8 @@ int main(int argc, char *argv[]){
         }
     }
 
-    if (matrixFileName.empty() && mode == Mode::DECODE){
-        std::cerr << "Error: Decoding requires -m argument" << std::endl;
+    if (mode == Mode::NONE){
+        std::cerr << "Error: -e or -d argument required" << std::endl;
         return 1;
     }
 
@@ -740,6 +762,12 @@ int main(int argc, char *argv[]){
         
     }else if (mode == Mode::DECODE){
 
+        //checking mandatory -m argument when decoding
+        if (matrixFileName.empty()){
+            std::cerr << "Error: Decoding requires -m argument" << std::endl;
+            return 1;
+        }
+
         //transforming input to vector
         auto binary = BinaryToVector(input);
 
@@ -747,7 +775,7 @@ int main(int argc, char *argv[]){
         parityCheckMatrix = csvToMatrix(matrixFileName);
 
         //decoding using hard decision bit flipping
-        auto decodedBinary = hardDecision(parityCheckMatrix, binary);
+        auto decodedBinary = decode(parityCheckMatrix, binary);
         
         //outputting vector as ASCII string
         std::cout << VectorToAscii(decodedBinary) << std::endl;
