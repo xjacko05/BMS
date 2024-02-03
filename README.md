@@ -1,1 +1,2 @@
-BMS
+# BMS
+Implementácia LDPC dekodéra
